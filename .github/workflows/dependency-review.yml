@@ -58,16 +58,20 @@ jobs:
           project: gitsomejava-order-api
           path: ./src
           format: HTML
-          # Do not fail the build here — the GitHub-native gate above already
-          # owns that job. This step exists to show the same finding from a
-          # vendor-neutral tool.
+          # --failOnCVSS 4 mirrors `fail-on-severity: moderate` on the
+          # GitHub-native gate above, so both halves of the room watch their
+          # own tooling go red on the same commit. 4.0 is the bottom of the
+          # moderate band; the demo CVE scores 8.8, so it clears it easily.
+          #
+          # Note 11 is not a valid CVSS score — the previous value made this
+          # step incapable of failing.
           #
           # --ossIndexPassword is the Sonatype Guide personal access token.
           # Without it the OSS Index analyzer silently disables itself and the
           # vendor-neutral half of the demo finds nothing. The matching
           # --ossIndexUsername flag is deprecated; the token stands alone.
           args: >-
-            --failOnCVSS 11
+            --failOnCVSS 4
             --enableRetired
             --ossIndexPassword ${{ secrets.OSSINDEX_TOKEN }}
 
