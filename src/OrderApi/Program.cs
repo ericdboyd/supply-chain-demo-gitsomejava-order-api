@@ -8,6 +8,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddHealthChecks();
 
+// Orders store. Configured in appsettings.json so the demo has something
+// concrete for secret scanning to find on the way in.
+var ordersConnectionString = builder.Configuration.GetConnectionString("OrdersDb");
+
 var app = builder.Build();
 
 app.MapHealthChecks("/healthz");
@@ -20,7 +24,8 @@ app.MapGet("/", () => Results.Ok(new
     // the running artifact is the one the attestation covers.
     version = Environment.GetEnvironmentVariable("APP_VERSION") ?? "dev",
     commit = Environment.GetEnvironmentVariable("APP_COMMIT") ?? "local",
-    builtBy = Environment.GetEnvironmentVariable("APP_BUILD_URL") ?? "not-a-pipeline"
+    builtBy = Environment.GetEnvironmentVariable("APP_BUILD_URL") ?? "not-a-pipeline",
+    ordersStore = string.IsNullOrWhiteSpace(ordersConnectionString) ? "unconfigured" : "configured"
 }));
 
 app.MapGet("/orders", () => Results.Ok(new[]
