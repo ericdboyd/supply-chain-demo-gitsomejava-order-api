@@ -23,6 +23,8 @@ app.MapGet("/", () => Results.Ok(new
     builtBy = Environment.GetEnvironmentVariable("APP_BUILD_URL") ?? "not-a-pipeline"
 }));
 
+app.MapGet("/orders/{id:int}", (int id) => Results.Ok(new { id, item = "Flat white" }));
+
 app.MapGet("/orders", () => Results.Ok(new[]
 {
     new { id = 1, item = "Flat white", size = "Regular" },
