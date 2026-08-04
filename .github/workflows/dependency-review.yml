@@ -1,0 +1,71 @@
+# =============================================================================
+#  Demo 1 — the gate that blocks PR #12.
+#
+#  Runs on pull requests, compares the dependency graph before and after,
+#  and fails the check when a change introduces a vulnerable component.
+#  That failure is the demo. Nothing here needs to be explained on stage
+#  beyond "this is the check that just went red."
+#
+#  ⚠️  Requires dependency graph enabled on the repository, and for private
+#      repositories, GitHub Advanced Security. Setup-GitHubRepo.ps1 turns
+#      both on where the plan allows and warns where it does not.
+# =============================================================================
+
+name: Dependency Review
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write # so the summary lands as a PR comment
+
+jobs:
+  review:
+    name: Review dependency changes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
+        with:
+          # Anything moderate or worse blocks the merge. Tuned low on purpose:
+          # the demo needs a visible red X, and arguing about thresholds on
+          # stage wastes the beat.
+          fail-on-severity: moderate
+          comment-summary-in-pr: on-failure
+
+  # The vendor-neutral half of slide 12b. Runs alongside the GitHub-native
+  # gate so both halves of the room see their own tooling produce the finding.
+  owasp:
+    name: OWASP Dependency-Check
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Run OWASP Dependency-Check
+        uses: dependency-check/Dependency-Check_Action@1e54355a8b4c8abaa8cc7d0b70aa655a3bb15a6c # main
+        with:
+          project: gitsomejava-order-api
+          path: ./src
+          format: HTML
+          # Do not fail the build here — the GitHub-native gate above already
+          # owns that job. This step exists to show the same finding from a
+          # vendor-neutral tool.
+          args: --failOnCVSS 11 --enableRetired
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dependency-check-report
+          path: reports/

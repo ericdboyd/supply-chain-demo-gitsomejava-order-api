@@ -1,0 +1,9 @@
+# Application code — the development team owns it.
+*                       @ericdboyd
+
+# Everything that decides HOW and WHERE it ships — platform and security.
+# This is the change-control gate: a change to the build definition or the
+# infrastructure cannot merge without a named reviewer.
+/.github/workflows/     @ericdboyd
+/infra/                 @ericdboyd
+Dockerfile              @ericdboyd

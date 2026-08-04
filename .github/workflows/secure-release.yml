@@ -1,0 +1,132 @@
+# =============================================================================
+#  The hardened pipeline — Demos 3, 4 and 5 all run through this one file.
+#
+#  On stage, contrast it with legacy-deploy.yml. Four differences matter:
+#    1. permissions are explicit and minimal        (slide 21)
+#    2. every third-party action is pinned to a SHA (slide 20)
+#    3. cloud auth is OIDC, no stored secret        (Demo 3)
+#    4. it produces an SBOM and an attestation      (Demos 4 and 5)
+#
+#  Every `uses:` is pinned to a commit SHA with the tag kept as a trailing
+#  comment for readability. Re-run scripts/Update-ActionPins.ps1 to refresh
+#  them; Test-DemoReadiness.ps1 fails if any unpinned placeholder returns.
+# =============================================================================
+
+name: Secure Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tamper:
+        description: 'Publish a deliberately tampered artifact (Demo 5 only)'
+        type: boolean
+        default: false
+
+# Default to nothing. Each job opts in to exactly what it needs.
+permissions: {}
+
+env:
+  IMAGE_NAME: gitsomejava/order-api
+
+jobs:
+  build:
+    name: Build, scan, attest
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read # clone the source
+      id-token: write # request the OIDC token — Demo 3
+      packages: write # push the image
+      attestations: write # sign the provenance — Demo 5
+
+    environment: production
+
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+      image: ${{ steps.meta.outputs.image }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Resolve image reference
+        id: meta
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [ "$GITHUB_REF_TYPE" = "tag" ] || VERSION="0.0.0-$(date +%Y%m%d)-${GITHUB_SHA::7}"
+          echo "version=$VERSION"                                    >> "$GITHUB_OUTPUT"
+          echo "image=${{ vars.AZURE_CONTAINER_REGISTRY_ENDPOINT }}/${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+
+      # --- Demo 3: no client secret anywhere in this job ---------------------
+      - name: Sign in to Azure with workload identity
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign in to the container registry
+        shell: bash
+        run: az acr login --name "${{ vars.AZURE_CONTAINER_REGISTRY_NAME }}"
+
+      - name: Build and push
+        id: push
+        shell: bash
+        working-directory: src/OrderApi
+        run: |
+          IMAGE="${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}"
+          docker build \
+            --build-arg APP_VERSION="${{ steps.meta.outputs.version }}" \
+            -t "$IMAGE" .
+          docker push "$IMAGE"
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Pushed $IMAGE@$DIGEST"
+
+      # --- Demo 4: the inventory --------------------------------------------
+      - name: Generate SBOM
+        shell: bash
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sh -s -- -b /usr/local/bin
+          syft "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}" \
+            -o spdx-json > sbom.spdx.json
+          echo "Components: $(jq '.packages | length' sbom.spdx.json)"
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sbom
+          path: sbom.spdx.json
+
+      # --- Demo 5: the climax ------------------------------------------------
+      # Deliberately AFTER the push, and bound to the digest rather than the
+      # tag. Attesting a tag would attest a mutable pointer, which is the
+      # whole failure mode slide 20 describes.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1
+        with:
+          subject-name: ${{ steps.meta.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "### Artifact published"
+            echo ""
+            echo '```'
+            echo "image:  ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}"
+            echo "digest: ${{ steps.push.outputs.digest }}"
+            echo '```'
+            echo ""
+            echo "Verify it yourself:"
+            echo '```bash'
+            echo "gh attestation verify oci://${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }} \\"
+            echo "  --owner ${{ github.repository_owner }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

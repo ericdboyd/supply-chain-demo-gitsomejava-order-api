@@ -1,0 +1,51 @@
+# =============================================================================
+#  ⚠️  THE ANTI-PATTERN. This workflow exists to be looked at, not run.
+#
+#  It is the left-hand side of Demo 3. Put it next to secure-release.yml and
+#  walk the four differences. It is disabled so it can never execute — an
+#  unrunnable bad example is safer than a runnable one on a demo machine.
+#
+#  The AZURE_CREDENTIALS secret referenced below is a deliberately invalid
+#  placeholder created by Setup-GitHubRepo.ps1. It authenticates to nothing.
+#  NEVER put a real service principal secret in this repository.
+# =============================================================================
+
+name: '[LEGACY — DO NOT RUN] Deploy with stored credentials'
+
+on:
+  workflow_dispatch: # never triggered automatically; kept for contrast only
+
+# ❌ PROBLEM 1 — blanket write to everything in the repository.
+#    Compare: secure-release.yml starts at `permissions: {}` and opts in.
+permissions: write-all
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    # Guard rail: this job will not run even if someone dispatches it.
+    if: ${{ false }}
+
+    steps:
+      # ❌ PROBLEM 2 — floating major-version tag on a third-party action.
+      #    The tag is a mutable label. tj-actions/changed-files, March 2025:
+      #    the attacker repointed every tag at one malicious commit and
+      #    23,000 repositories picked it up without changing a thing.
+      - uses: actions/checkout@v4
+
+      # ❌ PROBLEM 3 — a permanent cloud password living in CI.
+      #    It works until somebody rotates it. Nobody rotates it.
+      - name: Azure login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # ❌ PROBLEM 4 — builds and ships with no SBOM, no signature, no
+      #    provenance. Production has no way to tell this artifact from one
+      #    an attacker pushed.
+      - name: Build and deploy
+        run: |
+          docker build -t "$REGISTRY/order-api:latest" src/OrderApi
+          docker push "$REGISTRY/order-api:latest"
+        env:
+          REGISTRY: ${{ secrets.REGISTRY_LOGIN_SERVER }}

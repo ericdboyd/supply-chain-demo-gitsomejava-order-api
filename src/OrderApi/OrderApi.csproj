@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Deterministic, reproducible-ish builds. Relevant to the provenance
+         conversation in Act VII — mention only if asked. -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <Deterministic>true</Deterministic>
+    <UserSecretsId>09ae02ad-43cb-46f6-916e-5e5b248f0932</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Baseline dependencies. Current and clean.
+
+         Demo 1 works by adding ONE more package here via pull request —
+         see scripts/New-VulnerableDependencyPr.ps1. Do not add the
+         vulnerable package to this file directly; the whole point of the
+         demo is that it arrives as a reviewable change. -->
+    <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.22.0" />
+  </ItemGroup>
+
+</Project>
