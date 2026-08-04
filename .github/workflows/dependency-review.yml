@@ -61,7 +61,15 @@ jobs:
           # Do not fail the build here — the GitHub-native gate above already
           # owns that job. This step exists to show the same finding from a
           # vendor-neutral tool.
-          args: --failOnCVSS 11 --enableRetired
+          #
+          # --ossIndexPassword is the Sonatype Guide personal access token.
+          # Without it the OSS Index analyzer silently disables itself and the
+          # vendor-neutral half of the demo finds nothing. The matching
+          # --ossIndexUsername flag is deprecated; the token stands alone.
+          args: >-
+            --failOnCVSS 11
+            --enableRetired
+            --ossIndexPassword ${{ secrets.OSSINDEX_TOKEN }}
 
       - name: Upload report
         if: always()
